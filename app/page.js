@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import zxcvbn from "zxcvbn";
 
 export default function Home() {
@@ -9,11 +9,43 @@ export default function Home() {
   const [breachCount, setBreachCount] = useState(null); // null = not checked, -1 = error
   const [checking, setChecking] = useState(false);
 
-  // --- 1. Strength scoring using zxcvbn (made by Dropbox) ---
-  // zxcvbn checks against real leaked-password patterns, common words,
-  // keyboard patterns (like "qwerty"), dates, and repeated characters -
-  // much smarter than plain regex rules.
-  // It returns a score from 0 (worst) to 4 (best).
+  // --- Theme: "light", "dark", or "system" ---
+  const [theme, setTheme] = useState("system");
+  const [resolvedTheme, setResolvedTheme] = useState("light");
+
+  useEffect(() => {
+    if (theme === "system") {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setResolvedTheme(prefersDark ? "dark" : "light");
+    } else {
+      setResolvedTheme(theme);
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    if (theme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    function handleChange(e) {
+      setResolvedTheme(e.matches ? "dark" : "light");
+    }
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, [theme]);
+
+  const isDark = resolvedTheme === "dark";
+
+  const colors = {
+    pageBg: isDark ? "#111827" : "#f3f4f6",
+    cardBg: isDark ? "#1f2937" : "#fff",
+    text: isDark ? "#f9fafb" : "#111827",
+    subtext: isDark ? "#9ca3af" : "#6b7280",
+    inputBg: isDark ? "#111827" : "#fff",
+    inputBorder: isDark ? "#374151" : "#d1d5db",
+    barTrack: isDark ? "#374151" : "#e5e7eb",
+    strengthBtnBg: isDark ? "#374151" : "#f3f4f6",
+    strengthBtnText: isDark ? "#f9fafb" : "#374151",
+  };
+
   function getStrength(pwd) {
     const result = zxcvbn(pwd);
     if (result.score <= 1) return "Weak";
@@ -21,10 +53,6 @@ export default function Home() {
     return "Strong";
   }
 
-  // --- 2. Turn the password into a SHA-1 hash ---
-  // We never send the real password anywhere. We only send the first
-  // 5 characters of its hash to the breach API (this is called
-  // "k-anonymity" - it's how haveibeenpwned.com protects your password).
   async function sha1(text) {
     const data = new TextEncoder().encode(text);
     const hashBuffer = await crypto.subtle.digest("SHA-1", data);
@@ -35,7 +63,6 @@ export default function Home() {
       .toUpperCase();
   }
 
-  // --- 3. Ask the "Have I Been Pwned" API if this password leaked before ---
   async function checkBreach() {
     if (!password) return;
     setChecking(true);
@@ -43,13 +70,12 @@ export default function Home() {
 
     try {
       const hash = await sha1(password);
-      const prefix = hash.slice(0, 5); // first 5 chars, sent to API
-      const suffix = hash.slice(5); // rest, kept on our side only
+      const prefix = hash.slice(0, 5);
+      const suffix = hash.slice(5);
 
       const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
       const text = await response.text();
 
-      // API returns many lines like: "SUFFIX:COUNT"
       const lines = text.split("\n");
       let found = 0;
       for (const line of lines) {
@@ -61,13 +87,11 @@ export default function Home() {
       }
       setBreachCount(found);
 
-      // Even if the password looks complex, a leaked password is never
-      // actually safe. Force the label to "Weak" if it's been breached.
       if (found > 0) {
         setStrength("Weak");
       }
     } catch (error) {
-      setBreachCount(-1); // something went wrong (e.g. no internet)
+      setBreachCount(-1);
     }
 
     setChecking(false);
@@ -76,49 +100,86 @@ export default function Home() {
   function handleChange(e) {
     const value = e.target.value;
     setPassword(value);
-    setStrength(null); // clear old result whenever password changes
+    setStrength(null);
     setBreachCount(null);
   }
 
-  // Runs when the "Check strength" button is clicked
   function handleCheckStrength() {
     if (!password) return;
     setStrength(getStrength(password));
   }
 
-  // Color + fill-width for each strength level (used for the little bar below the input)
   const strengthStyle = {
     Weak: { color: "#e53935", width: "33%" },
     Medium: { color: "#fb8c00", width: "66%" },
     Strong: { color: "#43a047", width: "100%" },
   };
 
+  const themeOptions = [
+    { value: "light", label: "☀️ Light" },
+    { value: "dark", label: "🌙 Dark" },
+    { value: "system", label: "🖥️ System" },
+  ];
+
   return (
-    // Gray full-page background, card centered in the middle
     <main
       style={{
         minHeight: "100vh",
-        background: "#f3f4f6",
+        background: colors.pageBg,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         fontFamily: "sans-serif",
         padding: 16,
+        transition: "background 0.2s ease",
       }}
     >
-      {/* White card */}
       <div
         style={{
           width: "100%",
           maxWidth: 400,
-          background: "#fff",
+          background: colors.cardBg,
           borderRadius: 16,
           padding: 32,
           boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+          transition: "background 0.2s ease",
         }}
       >
-        <h1 style={{ fontSize: 24, margin: 0 }}>🔐 Password Checker</h1>
-        <p style={{ color: "#6b7280", fontSize: 14, marginTop: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            marginBottom: 20,
+            background: colors.pageBg,
+            padding: 4,
+            borderRadius: 8,
+          }}
+        >
+          {themeOptions.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setTheme(option.value)}
+              style={{
+                flex: 1,
+                padding: "6px 8px",
+                fontSize: 12,
+                fontWeight: "bold",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                background: theme === option.value ? colors.cardBg : "transparent",
+                color: colors.text,
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <h1 style={{ fontSize: 24, margin: 0, color: colors.text }}>
+          🔐 Password Checker
+        </h1>
+        <p style={{ color: colors.subtext, fontSize: 14, marginTop: 8 }}>
           Check your password's strength and see if it has leaked in a known
           data breach.
         </p>
@@ -134,9 +195,11 @@ export default function Home() {
             fontSize: 16,
             boxSizing: "border-box",
             marginTop: 20,
-            border: "1px solid #d1d5db",
+            border: `1px solid ${colors.inputBorder}`,
             borderRadius: 8,
             outline: "none",
+            background: colors.inputBg,
+            color: colors.text,
           }}
         />
 
@@ -149,23 +212,23 @@ export default function Home() {
             marginTop: 16,
             fontSize: 15,
             fontWeight: "bold",
-            color: "#374151",
-            background: !password ? "#e5e7eb" : "#f3f4f6",
-            border: "1px solid #d1d5db",
+            color: colors.strengthBtnText,
+            background: colors.strengthBtnBg,
+            border: `1px solid ${colors.inputBorder}`,
             borderRadius: 8,
             cursor: !password ? "not-allowed" : "pointer",
+            opacity: !password ? 0.6 : 1,
           }}
         >
           Check strength
         </button>
 
-        {/* Strength bar, only shows after clicking "Check strength" */}
         {strength && (
           <div style={{ marginTop: 12 }}>
             <div
               style={{
                 height: 8,
-                background: "#e5e7eb",
+                background: colors.barTrack,
                 borderRadius: 4,
                 overflow: "hidden",
               }}
@@ -212,7 +275,6 @@ export default function Home() {
           {checking ? "Checking..." : "Check if breached"}
         </button>
 
-        {/* Result box, color-coded and only shown after a check */}
         {breachCount !== null && breachCount >= 0 && (
           <div
             style={{
