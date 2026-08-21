@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import zxcvbn from "zxcvbn";
 
 export default function Home() {
   const [password, setPassword] = useState("");
@@ -8,22 +9,22 @@ export default function Home() {
   const [breachCount, setBreachCount] = useState(null); // null = not checked, -1 = error
   const [checking, setChecking] = useState(false);
 
-  // --- 1. Simple strength scoring ---
+  // --- 1. Strength scoring using zxcvbn (made by Dropbox) ---
+  // zxcvbn checks against real leaked-password patterns, common words,
+  // keyboard patterns (like "qwerty"), dates, and repeated characters -
+  // much smarter than plain regex rules.
+  // It returns a score from 0 (worst) to 4 (best).
   function getStrength(pwd) {
-    let score = 0;
-    if (pwd.length >= 8) score++;
-    if (pwd.length >= 12) score++;
-    if (/[a-z]/.test(pwd)) score++;
-    if (/[A-Z]/.test(pwd)) score++;
-    if (/[0-9]/.test(pwd)) score++;
-    if (/[^A-Za-z0-9]/.test(pwd)) score++;
-
-    if (score <= 2) return "Weak";
-    if (score <= 4) return "Medium";
+    const result = zxcvbn(pwd);
+    if (result.score <= 1) return "Weak";
+    if (result.score <= 3) return "Medium";
     return "Strong";
   }
 
-  // --- 2. SHA-1 hash the password in the browser ---
+  // --- 2. Turn the password into a SHA-1 hash ---
+  // We never send the real password anywhere. We only send the first
+  // 5 characters of its hash to the breach API (this is called
+  // "k-anonymity" - it's how haveibeenpwned.com protects your password).
   async function sha1(text) {
     const data = new TextEncoder().encode(text);
     const hashBuffer = await crypto.subtle.digest("SHA-1", data);
@@ -34,7 +35,7 @@ export default function Home() {
       .toUpperCase();
   }
 
-  // --- 3. Ask "Have I Been Pwned" if this password leaked before ---
+  // --- 3. Ask the "Have I Been Pwned" API if this password leaked before ---
   async function checkBreach() {
     if (!password) return;
     setChecking(true);
@@ -42,12 +43,13 @@ export default function Home() {
 
     try {
       const hash = await sha1(password);
-      const prefix = hash.slice(0, 5);
-      const suffix = hash.slice(5);
+      const prefix = hash.slice(0, 5); // first 5 chars, sent to API
+      const suffix = hash.slice(5); // rest, kept on our side only
 
       const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
       const text = await response.text();
 
+      // API returns many lines like: "SUFFIX:COUNT"
       const lines = text.split("\n");
       let found = 0;
       for (const line of lines) {
@@ -59,12 +61,13 @@ export default function Home() {
       }
       setBreachCount(found);
 
-      // A leaked password is never safe, no matter how complex it looks.
+      // Even if the password looks complex, a leaked password is never
+      // actually safe. Force the label to "Weak" if it's been breached.
       if (found > 0) {
         setStrength("Weak");
       }
     } catch (error) {
-      setBreachCount(-1);
+      setBreachCount(-1); // something went wrong (e.g. no internet)
     }
 
     setChecking(false);
@@ -73,10 +76,17 @@ export default function Home() {
   function handleChange(e) {
     const value = e.target.value;
     setPassword(value);
-    setStrength(value ? getStrength(value) : null);
+    setStrength(null); // clear old result whenever password changes
     setBreachCount(null);
   }
 
+  // Runs when the "Check strength" button is clicked
+  function handleCheckStrength() {
+    if (!password) return;
+    setStrength(getStrength(password));
+  }
+
+  // Color + fill-width for each strength level (used for the little bar below the input)
   const strengthStyle = {
     Weak: { color: "#e53935", width: "33%" },
     Medium: { color: "#fb8c00", width: "66%" },
@@ -84,6 +94,7 @@ export default function Home() {
   };
 
   return (
+    // Gray full-page background, card centered in the middle
     <main
       style={{
         minHeight: "100vh",
@@ -95,6 +106,7 @@ export default function Home() {
         padding: 16,
       }}
     >
+      {/* White card */}
       <div
         style={{
           width: "100%",
@@ -128,6 +140,26 @@ export default function Home() {
           }}
         />
 
+        <button
+          onClick={handleCheckStrength}
+          disabled={!password}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            marginTop: 16,
+            fontSize: 15,
+            fontWeight: "bold",
+            color: "#374151",
+            background: !password ? "#e5e7eb" : "#f3f4f6",
+            border: "1px solid #d1d5db",
+            borderRadius: 8,
+            cursor: !password ? "not-allowed" : "pointer",
+          }}
+        >
+          Check strength
+        </button>
+
+        {/* Strength bar, only shows after clicking "Check strength" */}
         {strength && (
           <div style={{ marginTop: 12 }}>
             <div
@@ -180,6 +212,7 @@ export default function Home() {
           {checking ? "Checking..." : "Check if breached"}
         </button>
 
+        {/* Result box, color-coded and only shown after a check */}
         {breachCount !== null && breachCount >= 0 && (
           <div
             style={{
