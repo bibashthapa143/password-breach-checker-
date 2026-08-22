@@ -27,4 +27,5 @@ This is called "k-anonymity" and it's the same method password managers like 1Pa
 
 - `app/page.js` — all the logic (strength check + breach check)
 - `app/layout.js` — basic page wrapper
+- `app/globals.css` — basic 
 - `package.json` — dependencies
