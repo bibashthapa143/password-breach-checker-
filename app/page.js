@@ -5,14 +5,15 @@ import zxcvbn from "zxcvbn";
 
 export default function Home() {
   const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
   const [strength, setStrength] = useState(null);
-  const [breachCount, setBreachCount] = useState(null); // null = not checked, -1 = error
+  const [crackTime, setCrackTime] = useState(null);
+  const [breachCount, setBreachCount] = useState(null);
   const [checking, setChecking] = useState(false);
 
-  // --- Theme: "light", "dark", or "system" ---
   const [theme, setTheme] = useState("system");
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
-  const [resolvedTheme, setResolvedTheme] = useState("light");
+  const [resolvedTheme, setResolvedTheme] = useState("dark");
 
   useEffect(() => {
     if (theme === "system") {
@@ -36,22 +37,68 @@ export default function Home() {
   const isDark = resolvedTheme === "dark";
 
   const colors = {
-    pageBg: isDark ? "#111827" : "#f3f4f6",
-    cardBg: isDark ? "#1f2937" : "#fff",
-    text: isDark ? "#f9fafb" : "#111827",
-    subtext: isDark ? "#9ca3af" : "#6b7280",
-    inputBg: isDark ? "#111827" : "#fff",
-    inputBorder: isDark ? "#374151" : "#d1d5db",
-    barTrack: isDark ? "#374151" : "#e5e7eb",
-    strengthBtnBg: isDark ? "#374151" : "#f3f4f6",
-    strengthBtnText: isDark ? "#f9fafb" : "#374151",
+    pageBg: isDark ? "#0D1117" : "#F6F5F2",
+    cardBg: isDark ? "#151B23" : "#FFFFFF",
+    border: isDark ? "#2A313C" : "#E4E1D8",
+    text: isDark ? "#E8EAED" : "#1B1F24",
+    subtext: isDark ? "#8B94A3" : "#68707C",
+    inputBg: isDark ? "#0D1117" : "#FBFAF7",
+    trackBg: isDark ? "#232B35" : "#ECE9E1",
+    accent: "#D9A441",
+    accentText: "#1B1300",
+    danger: isDark ? "#F87171" : "#C0362C",
+    dangerBg: isDark ? "rgba(248,113,113,0.08)" : "#FBEEEC",
+    success: isDark ? "#4ADE80" : "#1E8E5A",
+    successBg: isDark ? "rgba(74,222,128,0.08)" : "#EAF7EF",
   };
+
+  const mono = "'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace";
+  const sans = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+  function formatCrackTime(seconds) {
+    if (seconds < 0.01) return "instantly";
+    if (seconds < 1) return "less than a second";
+
+    const units = [
+      { label: "seconds", secs: 1 },
+      { label: "minutes", secs: 60 },
+      { label: "hours", secs: 60 * 60 },
+      { label: "days", secs: 60 * 60 * 24 },
+      { label: "months", secs: 60 * 60 * 24 * 30 },
+      { label: "years", secs: 60 * 60 * 24 * 365 },
+      { label: "centuries", secs: 60 * 60 * 24 * 365 * 100 },
+    ];
+
+    let chosen = units[0];
+    for (const unit of units) {
+      if (seconds >= unit.secs) chosen = unit;
+    }
+
+    const value = seconds / chosen.secs;
+    return `${value.toFixed(2)} ${chosen.label}`;
+  }
 
   function getStrength(pwd) {
     const result = zxcvbn(pwd);
-    if (result.score <= 1) return "Weak";
-    if (result.score <= 3) return "Medium";
-    return "Strong";
+    let label = "Weak";
+    if (result.score >= 4) label = "Strong";
+    else if (result.score >= 2) label = "Medium";
+
+    const rawSeconds = result.crack_times_seconds.offline_fast_hashing_1e10_per_second;
+
+    return {
+      label,
+      crackTime: formatCrackTime(rawSeconds),
+    };
+  }
+
+  function getChecklist(pwd) {
+    return [
+      { label: "8+ characters", passed: pwd.length >= 8 },
+      { label: "Uppercase letter", passed: /[A-Z]/.test(pwd) },
+      { label: "Number", passed: /[0-9]/.test(pwd) },
+      { label: "Symbol", passed: /[^A-Za-z0-9]/.test(pwd) },
+    ];
   }
 
   async function sha1(text) {
@@ -64,8 +111,14 @@ export default function Home() {
       .toUpperCase();
   }
 
-  async function checkBreach() {
+  // One button: checks strength instantly, then breach status via API
+  async function checkPassword() {
     if (!password) return;
+
+    const result = getStrength(password);
+    setStrength(result.label);
+    setCrackTime(result.crackTime);
+
     setChecking(true);
     setBreachCount(null);
 
@@ -102,28 +155,25 @@ export default function Home() {
     const value = e.target.value;
     setPassword(value);
     setStrength(null);
+    setCrackTime(null);
     setBreachCount(null);
   }
 
-  function handleCheckStrength() {
-    if (!password) return;
-    setStrength(getStrength(password));
-  }
+  const checklist = getChecklist(password);
 
-  const strengthStyle = {
-    Weak: { color: "#e53935", width: "33%" },
-    Medium: { color: "#fb8c00", width: "66%" },
-    Strong: { color: "#43a047", width: "100%" },
+  const strengthLevels = ["Weak", "Medium", "Strong"];
+  const strengthColor = {
+    Weak: colors.danger,
+    Medium: colors.accent,
+    Strong: colors.success,
   };
+  const activeSegments = strength ? strengthLevels.indexOf(strength) + 1 : 0;
 
   const themeOptions = [
-    { value: "light", label: "☀️ Light" },
-    { value: "dark", label: "🌙 Dark" },
-    { value: "system", label: "🖥️ System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "system", label: "System" },
   ];
-
-  const currentIcon =
-    theme === "light" ? "☀️" : theme === "dark" ? "🌙" : "🖥️";
 
   return (
     <main
@@ -133,9 +183,8 @@ export default function Home() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontFamily: "sans-serif",
+        fontFamily: sans,
         padding: 16,
-        transition: "background 0.2s ease",
         position: "relative",
       }}
     >
@@ -143,30 +192,31 @@ export default function Home() {
         <button
           onClick={() => setThemeMenuOpen(!themeMenuOpen)}
           style={{
-            width: 40,
-            height: 40,
-            fontSize: 18,
-            border: `1px solid ${colors.inputBorder}`,
-            borderRadius: "50%",
+            width: 38,
+            height: 38,
+            fontSize: 15,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 10,
             background: colors.cardBg,
+            color: colors.subtext,
             cursor: "pointer",
           }}
         >
-          {currentIcon}
+          {isDark ? "◐" : "◑"}
         </button>
 
         {themeMenuOpen && (
           <div
             style={{
               position: "absolute",
-              top: 48,
+              top: 46,
               right: 0,
               background: colors.cardBg,
-              border: `1px solid ${colors.inputBorder}`,
-              borderRadius: 8,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 10,
               overflow: "hidden",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-              minWidth: 130,
+              boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+              minWidth: 120,
             }}
           >
             {themeOptions.map((option) => (
@@ -179,12 +229,12 @@ export default function Home() {
                 style={{
                   display: "block",
                   width: "100%",
-                  padding: "10px 14px",
+                  padding: "9px 14px",
                   fontSize: 13,
-                  fontWeight: theme === option.value ? "bold" : "normal",
+                  fontWeight: theme === option.value ? 700 : 400,
                   border: "none",
                   background: theme === option.value ? colors.pageBg : "transparent",
-                  color: colors.text,
+                  color: theme === option.value ? colors.accent : colors.text,
                   textAlign: "left",
                   cursor: "pointer",
                 }}
@@ -201,143 +251,216 @@ export default function Home() {
           width: "100%",
           maxWidth: 400,
           background: colors.cardBg,
-          borderRadius: 16,
-          padding: 32,
-          boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-          transition: "background 0.2s ease",
+          borderRadius: 14,
+          border: `1px solid ${colors.border}`,
+          boxShadow: isDark
+            ? "0 20px 60px rgba(0,0,0,0.45)"
+            : "0 20px 50px rgba(20,20,10,0.08)",
+          overflow: "hidden",
         }}
       >
-        <h1 style={{ fontSize: 24, margin: 0, color: colors.text }}>
-          🔐 Password Checker
-        </h1>
-        <p style={{ color: colors.subtext, fontSize: 14, marginTop: 8 }}>
-          Check your password's strength and see if it has leaked in a known
-          data breach.
-        </p>
+        <div style={{ height: 3, background: colors.accent }} />
 
-        <input
-          type="text"
-          value={password}
-          onChange={handleChange}
-          placeholder="Enter password"
-          style={{
-            width: "100%",
-            padding: "12px 14px",
-            fontSize: 16,
-            boxSizing: "border-box",
-            marginTop: 20,
-            border: `1px solid ${colors.inputBorder}`,
-            borderRadius: 8,
-            outline: "none",
-            background: colors.inputBg,
-            color: colors.text,
-          }}
-        />
+        <div style={{ padding: "28px 28px 32px" }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 11,
+              letterSpacing: "0.14em",
+              fontWeight: 700,
+              color: colors.accent,
+              textTransform: "uppercase",
+            }}
+          >
+            Password Security
+          </p>
+          <h1
+            style={{
+              fontSize: 22,
+              margin: "6px 0 0",
+              color: colors.text,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Strength &amp; Breach Check
+          </h1>
+          <p style={{ color: colors.subtext, fontSize: 13.5, marginTop: 6, lineHeight: 1.5 }}>
+            Score your password and confirm it hasn't surfaced in a known leak.
+          </p>
 
-        <button
-          onClick={handleCheckStrength}
-          disabled={!password}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            marginTop: 16,
-            fontSize: 15,
-            fontWeight: "bold",
-            color: colors.strengthBtnText,
-            background: colors.strengthBtnBg,
-            border: `1px solid ${colors.inputBorder}`,
-            borderRadius: 8,
-            cursor: !password ? "not-allowed" : "pointer",
-            opacity: !password ? 0.6 : 1,
-          }}
-        >
-          Check strength
-        </button>
+          <div style={{ position: "relative", marginTop: 22 }}>
+            <input
+              type={visible ? "text" : "password"}
+              value={password}
+              onChange={handleChange}
+              placeholder="Enter password"
+              style={{
+                width: "100%",
+                padding: "12px 44px 12px 14px",
+                fontSize: 15,
+                fontFamily: mono,
+                boxSizing: "border-box",
+                border: `1px solid ${colors.border}`,
+                borderRadius: 9,
+                outline: "none",
+                background: colors.inputBg,
+                color: colors.text,
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setVisible(!visible)}
+              aria-label={visible ? "Hide password" : "Show password"}
+              style={{
+                position: "absolute",
+                right: 6,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 12,
+                fontFamily: mono,
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+                color: colors.subtext,
+                padding: "6px 8px",
+              }}
+            >
+              {visible ? "HIDE" : "SHOW"}
+            </button>
+          </div>
 
-        {strength && (
-          <div style={{ marginTop: 12 }}>
+          {password && (
             <div
               style={{
-                height: 8,
-                background: colors.barTrack,
-                borderRadius: 4,
-                overflow: "hidden",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 14,
               }}
             >
+              {checklist.map((item) => (
+                <span
+                  key={item.label}
+                  style={{
+                    fontSize: 11.5,
+                    fontFamily: mono,
+                    padding: "4px 9px",
+                    borderRadius: 6,
+                    border: `1px solid ${item.passed ? colors.success : colors.border}`,
+                    color: item.passed ? colors.success : colors.subtext,
+                    background: item.passed ? colors.successBg : "transparent",
+                  }}
+                >
+                  {item.passed ? "✓" : "·"} {item.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={checkPassword}
+            disabled={!password || checking}
+            style={{
+              width: "100%",
+              marginTop: 20,
+              padding: "12px 14px",
+              fontSize: 14,
+              fontWeight: 700,
+              color: colors.accentText,
+              background: !password || checking ? colors.trackBg : colors.accent,
+              border: "none",
+              borderRadius: 9,
+              cursor: !password || checking ? "not-allowed" : "pointer",
+              opacity: !password || checking ? 0.6 : 1,
+            }}
+          >
+            {checking ? "Checking…" : "Check password"}
+          </button>
+
+          {strength && (
+            <div style={{ marginTop: 22 }}>
+              <div style={{ display: "flex", gap: 5 }}>
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      flex: 1,
+                      height: 6,
+                      borderRadius: 3,
+                      background: i < activeSegments ? strengthColor[strength] : colors.trackBg,
+                      transition: "background 0.25s ease",
+                    }}
+                  />
+                ))}
+              </div>
               <div
                 style={{
-                  height: "100%",
-                  width: strengthStyle[strength].width,
-                  background: strengthStyle[strength].color,
-                  transition: "width 0.3s ease",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginTop: 9,
                 }}
-              />
+              >
+                <span
+                  style={{
+                    color: strengthColor[strength],
+                    fontWeight: 700,
+                    fontSize: 13.5,
+                  }}
+                >
+                  {strength}
+                </span>
+                {crackTime && (
+                  <span style={{ color: colors.subtext, fontSize: 12, fontFamily: mono }}>
+                    crack time ≈ {crackTime}
+                  </span>
+                )}
+              </div>
             </div>
-            <p
+          )}
+
+          {breachCount !== null && breachCount >= 0 && (
+            <div
               style={{
-                color: strengthStyle[strength].color,
-                fontWeight: "bold",
-                fontSize: 14,
-                marginTop: 6,
-                marginBottom: 0,
+                marginTop: 18,
+                padding: "12px 14px",
+                borderRadius: 9,
+                fontSize: 13,
+                lineHeight: 1.5,
+                background: breachCount > 0 ? colors.dangerBg : colors.successBg,
+                color: breachCount > 0 ? colors.danger : colors.success,
+                border: `1px solid ${breachCount > 0 ? colors.danger : colors.success}22`,
               }}
             >
-              {strength}
-            </p>
-          </div>
-        )}
+              {breachCount > 0 ? (
+                <>
+                  <strong>{breachCount.toLocaleString()}</strong> known breaches contain this
+                  password. Treat it as compromised regardless of how complex it looks.
+                </>
+              ) : (
+                "No matches found in known breach data."
+              )}
+            </div>
+          )}
 
-        <button
-          onClick={checkBreach}
-          disabled={!password || checking}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            marginTop: 20,
-            fontSize: 15,
-            fontWeight: "bold",
-            color: "#fff",
-            background: !password || checking ? "#9ca3af" : "#4f46e5",
-            border: "none",
-            borderRadius: 8,
-            cursor: !password || checking ? "not-allowed" : "pointer",
-          }}
-        >
-          {checking ? "Checking..." : "Check if breached"}
-        </button>
-
-        {breachCount !== null && breachCount >= 0 && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 12,
-              borderRadius: 8,
-              fontSize: 14,
-              background: breachCount > 0 ? "#fef2f2" : "#f0fdf4",
-              color: breachCount > 0 ? "#b91c1c" : "#15803d",
-            }}
-          >
-            {breachCount > 0
-              ? `⚠️ Found in ${breachCount.toLocaleString()} breaches. Marked as Weak — leaked passwords are unsafe no matter how complex they look.`
-              : "✅ Not found in any known breach."}
-          </div>
-        )}
-
-        {breachCount === -1 && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 12,
-              borderRadius: 8,
-              fontSize: 14,
-              background: "#fef2f2",
-              color: "#b91c1c",
-            }}
-          >
-            Couldn't check right now. Check your internet connection and try
-            again.
-          </div>
-        )}
+          {breachCount === -1 && (
+            <div
+              style={{
+                marginTop: 18,
+                padding: "12px 14px",
+                borderRadius: 9,
+                fontSize: 13,
+                background: colors.dangerBg,
+                color: colors.danger,
+                border: `1px solid ${colors.danger}22`,
+              }}
+            >
+              Couldn't reach the breach check. Confirm your connection and try again.
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );
