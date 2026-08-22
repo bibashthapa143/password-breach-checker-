@@ -11,6 +11,7 @@ export default function Home() {
 
   // --- Theme: "light", "dark", or "system" ---
   const [theme, setTheme] = useState("system");
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [resolvedTheme, setResolvedTheme] = useState("light");
 
   useEffect(() => {
@@ -121,6 +122,9 @@ export default function Home() {
     { value: "system", label: "🖥️ System" },
   ];
 
+  const currentIcon =
+    theme === "light" ? "☀️" : theme === "dark" ? "🌙" : "🖥️";
+
   return (
     <main
       style={{
@@ -132,8 +136,66 @@ export default function Home() {
         fontFamily: "sans-serif",
         padding: 16,
         transition: "background 0.2s ease",
+        position: "relative",
       }}
     >
+      <div style={{ position: "absolute", top: 20, right: 20 }}>
+        <button
+          onClick={() => setThemeMenuOpen(!themeMenuOpen)}
+          style={{
+            width: 40,
+            height: 40,
+            fontSize: 18,
+            border: `1px solid ${colors.inputBorder}`,
+            borderRadius: "50%",
+            background: colors.cardBg,
+            cursor: "pointer",
+          }}
+        >
+          {currentIcon}
+        </button>
+
+        {themeMenuOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: 48,
+              right: 0,
+              background: colors.cardBg,
+              border: `1px solid ${colors.inputBorder}`,
+              borderRadius: 8,
+              overflow: "hidden",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              minWidth: 130,
+            }}
+          >
+            {themeOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => {
+                  setTheme(option.value);
+                  setThemeMenuOpen(false);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  fontWeight: theme === option.value ? "bold" : "normal",
+                  border: "none",
+                  background: theme === option.value ? colors.pageBg : "transparent",
+                  color: colors.text,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div
         style={{
           width: "100%",
@@ -145,37 +207,6 @@ export default function Home() {
           transition: "background 0.2s ease",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            marginBottom: 20,
-            background: colors.pageBg,
-            padding: 4,
-            borderRadius: 8,
-          }}
-        >
-          {themeOptions.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => setTheme(option.value)}
-              style={{
-                flex: 1,
-                padding: "6px 8px",
-                fontSize: 12,
-                fontWeight: "bold",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                background: theme === option.value ? colors.cardBg : "transparent",
-                color: colors.text,
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
         <h1 style={{ fontSize: 24, margin: 0, color: colors.text }}>
           🔐 Password Checker
         </h1>
