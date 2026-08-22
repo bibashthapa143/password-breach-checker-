@@ -1,3 +1,5 @@
+import "./globals.css";
+
 export const metadata = {
   title: "Password Checker",
   description: "Simple password strength & breach checker",
